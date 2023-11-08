@@ -3,6 +3,9 @@
 This codebase automates the collection of fine-aligned audio-MIDI data using
 (e.g.) a Yamaha Disklavier self-playing piano.
 
+You can download a 16 kHz downsampled monophonic mixture of a re-performance
+of the MAESTRO dataset with `piano_capture` on Zenodo (**Studio MAESTRO**: https://zenodo.org/records/10082144).
+
 Recommended installation:
 ```
 pip install -e .
