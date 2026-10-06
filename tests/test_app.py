@@ -36,9 +36,15 @@ class FakeInputStream:
         return time.monotonic() - self._t0
 
     def _run(self):
+        # Like a real device, deliver however many frames the clock says are due, so
+        # the recording length stays correct even if the thread wakes up late (as
+        # thread timers often do on macOS).
         block = np.full((self.block_size, self.channels), 0.1, dtype="float32")
+        frames_delivered = 0
         while not self._stop.wait(self.block_size / self.samplerate):
-            self.callback(block, self.block_size, None, None)
+            while frames_delivered + self.block_size <= self.time * self.samplerate:
+                self.callback(block, self.block_size, None, None)
+                frames_delivered += self.block_size
 
 
 class FakeOutputPort:
