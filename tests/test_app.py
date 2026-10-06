@@ -173,6 +173,26 @@ def test_run_refuses_unsafe_cooldown(tmp_path, cooldown):
     assert excinfo.value.code == 1
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs macOS")
+def test_realtime_and_channel_map_on_macos():
+    from piano_capture.darwin_realtime import enable_realtime
+
+    # Runs in a separate thread so the test runner's own thread policy is untouched
+    errors = []
+
+    def target():
+        try:
+            enable_realtime()
+        except Exception as e:
+            errors.append(e)
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join()
+    assert errors == []
+    assert app._channel_map_settings([2, 3]) is not None
+
+
 @pytest.mark.skipif(sys.platform == "darwin", reason="behaviour off macOS")
 def test_realtime_is_ignored_off_macos(tmp_path):
     app.run(tmp_path, tmp_path, "port", 0, realtime=True)
