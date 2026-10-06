@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import fire
-import mido
 import sounddevice as sd
 import soundfile as sf
 import sys
-import queue
 import time
-import numpy as np
 
 from mido import MetaMessage, MidiFile, open_output
 from pathlib import Path
@@ -15,6 +12,21 @@ from tqdm import tqdm
 
 from piano_capture.util import print_banner
 from piano_capture.darwin_realtime import enable_realtime
+
+# Seconds to keep recording after the last MIDI event, to avoid cutting off the decay.
+# TODO: set this based on delay_ms?
+TAIL_DURATION_SEC = 3.0
+
+
+def _channel_map_settings(channel_map: list[int] | None):
+    if not channel_map:
+        return None
+    if sys.platform != "darwin":
+        raise ValueError(
+            "channel_map is only supported on macOS (Core Audio). On other platforms, "
+            "record all channels and select them with piano-capture-postprocess."
+        )
+    return sd.CoreAudioSettings(channel_map=channel_map)
 
 
 def capture_performance(
@@ -32,6 +44,10 @@ def capture_performance(
     Plays a MIDI file through an output port and simultaneously captures audio data
     from a specified input audio source, writing the resulting wave to disk.
 
+    Audio is first written to "<output_audio_filepath>.partial" and only renamed to
+    output_audio_filepath once the capture completes, so an interrupted capture never
+    leaves a file behind that would be mistaken for a finished one.
+
     Args:
         input_midi_filepath:
             Path to MIDI file to play back.
@@ -42,25 +58,25 @@ def capture_performance(
         input_audio_device:
             Physical device number of the input audio source (e.g. microphone).
         delay_ms:
-            If there is a fixed delay between the MIDI events and their playback, the
-            audio will be trimmed by this amount.
+            Currently unused: the captured audio is written untrimmed. Use offset_ms
+            in piano-capture-postprocess to remove the playback delay.
         num_channels:
             Number of channels on the input recording device.
         channel_map:
-            List of channels to record. Default is the first num_channels channels.
+            List of channels to record (macOS only). Default is the first
+            num_channels channels.
 
             Must satisfy num_channels = len(channel_map).
         sample_rate:
             The sample rate to use for the audio recording. Note: the same value will
             be used for opening the input audio stream and for writing the file to disk.
     """
-    audio_buffer = []
-
     if channel_map and num_channels != len(channel_map):
-        print(
-            f"Error: num_channels ({num_channels}) does not equal len(channel_map) ({len(channel_map)})!"
+        raise ValueError(
+            f"num_channels ({num_channels}) does not equal len(channel_map) ({len(channel_map)})"
         )
-        return
+
+    audio_buffer = []
 
     def recording_callback(indata, frames, time, status):
         if status:
@@ -74,19 +90,23 @@ def capture_performance(
         print("Skipping")
         return
 
-    core_audio_settings = None
-    if channel_map:
-        core_audio_settings = sd.CoreAudioSettings(channel_map=channel_map)
+    core_audio_settings = _channel_map_settings(channel_map)
+
+    output_audio_filepath = Path(output_audio_filepath)
+    partial_audio_filepath = output_audio_filepath.with_name(
+        f"{output_audio_filepath.name}.partial"
+    )
 
     with open_output(output_port_name) as out_port:
-        with sf.SoundFile(
-            output_audio_filepath,
-            mode="w",
-            samplerate=sample_rate,
-            channels=num_channels,
-            subtype="PCM_24",
-        ) as file:
-            try:
+        try:
+            with sf.SoundFile(
+                partial_audio_filepath,
+                mode="w",
+                samplerate=sample_rate,
+                channels=num_channels,
+                subtype="PCM_24",
+                format="WAV",
+            ) as file:
                 with sd.InputStream(
                     device=input_audio_device,
                     samplerate=sample_rate,
@@ -116,20 +136,20 @@ def capture_performance(
                         out_port.send(msg)
 
                     # Slightly lengthen capture session to avoid any unexpected cutoff
-                    # TODO: set this based on delay_ms?
-                    time.sleep(3)
+                    time.sleep(TAIL_DURATION_SEC)
 
-                    # Write wavefile to disk
-                    for data in audio_buffer:
-                        file.write(data)
-            except KeyboardInterrupt:
-                print()
-                print("Tearing down session...")
-                file.close()
-                Path(file.name).unlink()
-                out_port.reset()
-                out_port.close()
-                sys.exit(130)
+                # Write wavefile to disk once the stream has stopped
+                for data in audio_buffer:
+                    file.write(data)
+
+            partial_audio_filepath.replace(output_audio_filepath)
+        except KeyboardInterrupt:
+            print()
+            print("Tearing down session...")
+            out_port.reset()
+            sys.exit(130)
+        finally:
+            partial_audio_filepath.unlink(missing_ok=True)
 
 
 def run(
@@ -157,7 +177,7 @@ def run(
     Args:
         input_midi_root:
             Path to root directory of MIDI files. All files beneath this ending in
-            ".mid" will be played in the session.
+            ".mid" or ".midi" will be played in the session.
         output_audio_root:
             Path to the root directory for WAV file output. Each destination filepath
             is derived from the correspondong MIDI file: the relative path will be the
@@ -171,12 +191,13 @@ def run(
         input_audio_device:
             Physical device number of the input audio source (e.g. microphone).
         delay_ms:
-            If there is a fixed delay between the MIDI events and their playback, the
-            audio will be trimmed by this amount.
+            Currently unused: the captured audio is written untrimmed. Use offset_ms
+            in piano-capture-postprocess to remove the playback delay.
         num_channels:
             Number of channels on the input recording device.
         channel_map:
-            List of channels to record. Default is the first num_channels channels.
+            List of channels to record (macOS only). Default is the first
+            num_channels channels.
 
             Must satisfy num_channels = len(channel_map).
         sample_rate:
@@ -184,7 +205,7 @@ def run(
             be used for opening the input audio stream and for writing the file to disk.
         realtime:
             Configure the thread policy for realtime computation. Default is true, but
-            only supported on macOS.
+            only supported on macOS (ignored elsewhere). Disable with --norealtime.
         output_suffix:
             Additional suffix to add to output files (before ".wav"). Useful to
             distinguish between (say) different recording conditions.
@@ -207,12 +228,18 @@ def run(
         )
         sys.exit(1)
 
+    try:
+        _channel_map_settings(channel_map)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
     if cooldown_parameters is None:
         print("Refusing to run without cooldown limits.")
         sys.exit(1)
-    elif cooldown_parameters[0] / cooldown_parameters[1] > 5.0:
+    elif cooldown_parameters[1] <= 0 or cooldown_parameters[0] / cooldown_parameters[1] > 5.0:
         print(
-            "Refusing to run with cooldown parameters with a ratio greater than 5-to-1: f{cooldown_parameters}"
+            f"Refusing to run with cooldown parameters with a ratio greater than 5-to-1: {cooldown_parameters}"
         )
         sys.exit(1)
 
@@ -221,7 +248,9 @@ def run(
 
     midi_root = Path(input_midi_root).absolute()
     audio_root = Path(output_audio_root).absolute()
-    midi_filepaths = list(midi_root.rglob("*.[Mm][Ii][Dd]"))
+    midi_filepaths = [
+        p for p in midi_root.rglob("*") if p.suffix.lower() in (".mid", ".midi")
+    ]
     midi_filepaths = sorted(midi_filepaths, key=lambda p: p.stat().st_size)
 
     print(f"Preparing to record {len(midi_filepaths)} MIDI files beneath {midi_root}")
@@ -231,39 +260,49 @@ def run(
     )
 
     if realtime:
-        enable_realtime()
+        if sys.platform == "darwin":
+            enable_realtime()
+        else:
+            print("Realtime thread policy is only supported on macOS; continuing without it.")
 
     # Set current time for cooldown timer
     cooldown_timer = time.time()
 
-    for input_midi_filepath in (progress_bar := tqdm(midi_filepaths)):
-        if time.time() - cooldown_timer > cooldown_threshold_sec:
-            time.sleep(cooldown_duration_sec)
-            cooldown_timer = time.time()
+    try:
+        for input_midi_filepath in (progress_bar := tqdm(midi_filepaths)):
+            if time.time() - cooldown_timer > cooldown_threshold_sec:
+                time.sleep(cooldown_duration_sec)
+                cooldown_timer = time.time()
 
-        relative_midi_path = input_midi_filepath.relative_to(midi_root)
-        relative_audio_path = (
-            Path(relative_midi_path)
-            .with_name(f"{relative_midi_path.stem}{output_suffix}")
-            .with_suffix(f".wav")
-        )
-        output_audio_filepath = Path(audio_root, relative_audio_path)
-        if output_audio_filepath.exists():
-            print("Skipping MIDI file because output exists:", output_audio_filepath)
-            continue
-        Path(output_audio_filepath).parent.mkdir(parents=True, exist_ok=True)
-        progress_bar.set_description(f"Processing {relative_midi_path}")
-        capture_performance(
-            input_midi_filepath,
-            output_audio_filepath,
-            output_port_name,
-            input_audio_device,
-            delay_ms,
-            num_channels,
-            channel_map,
-            sample_rate,
-        )
+            relative_midi_path = input_midi_filepath.relative_to(midi_root)
+            relative_audio_path = relative_midi_path.with_name(
+                f"{relative_midi_path.stem}{output_suffix}.wav"
+            )
+            output_audio_filepath = Path(audio_root, relative_audio_path)
+            if output_audio_filepath.exists():
+                print("Skipping MIDI file because output exists:", output_audio_filepath)
+                continue
+            Path(output_audio_filepath).parent.mkdir(parents=True, exist_ok=True)
+            progress_bar.set_description(f"Processing {relative_midi_path}")
+            capture_performance(
+                input_midi_filepath,
+                output_audio_filepath,
+                output_port_name,
+                input_audio_device,
+                delay_ms,
+                num_channels,
+                channel_map,
+                sample_rate,
+            )
+    except KeyboardInterrupt:
+        # Interrupted between performances (e.g. during a cooldown)
+        print()
+        sys.exit(130)
+
+
+def main():
+    fire.Fire(run, name="piano-capture")
 
 
 if __name__ == "__main__":
-    fire.Fire(run)
+    main()
