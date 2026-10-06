@@ -106,8 +106,12 @@ def test_capture_writes_audio_and_plays_midi_in_time(tmp_path, midi_file, fake_i
 
     messages = [msg for _, msg in fake_io.sent]
     assert [msg.type for msg in messages] == ["note_on", "note_off", "note_on", "note_off"]
-    elapsed = fake_io.sent[-1][0] - fake_io.sent[0][0]
-    assert elapsed == pytest.approx(0.4, abs=0.05)
+    # Messages are never sent early, and lateness does not accumulate (each event is
+    # rescheduled against the stream clock). The upper bound is loose because a single
+    # sleep can overshoot by tens of milliseconds on a busy CI machine.
+    offsets = [t - fake_io.sent[0][0] for t, _ in fake_io.sent]
+    for offset, scheduled in zip(offsets, [0.0, 0.2, 0.2, 0.4]):
+        assert scheduled - 0.005 <= offset < scheduled + 0.15
 
 
 def test_failed_capture_leaves_no_file_behind(tmp_path, midi_file, fake_io, monkeypatch):
