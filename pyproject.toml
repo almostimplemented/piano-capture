@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Automated capture of aligned audio-MIDI recordings with a self-playing piano (e.g. Yamaha Disklavier)"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Andrew Edwards", email = "a.c.edwards@qmul.ac.uk" }]
+authors = [{ name = "Drew Edwards", email = "a.c.edwards@qmul.ac.uk" }]
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["disklavier", "midi", "audio", "piano", "transcription", "dataset"]
 classifiers = [
     "Development Status :: 4 - Beta",

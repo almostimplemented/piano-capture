@@ -4,7 +4,7 @@ title: "piano-capture"
 type: software
 authors:
   - family-names: Edwards
-    given-names: Andrew
+    given-names: Drew
 repository-code: "https://github.com/almostimplemented/piano-capture"
 preferred-citation:
   type: article
