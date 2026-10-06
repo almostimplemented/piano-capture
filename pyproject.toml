@@ -7,7 +7,7 @@ name = "piano-capture"
 version = "0.1.0"
 description = "Automated capture of aligned audio-MIDI recordings with a self-playing piano (e.g. Yamaha Disklavier)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [{ name = "Drew Edwards", email = "a.c.edwards@qmul.ac.uk" }]
 license = "MIT"
 license-files = ["LICENSE"]

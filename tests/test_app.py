@@ -147,7 +147,7 @@ def test_unreadable_midi_file_is_skipped(tmp_path, fake_io):
 def test_run_mirrors_hierarchy_and_skips_existing(tmp_path, monkeypatch):
     midi_root = tmp_path / "midi"
     audio_root = tmp_path / "audio"
-    for relative in ["2004/a.mid", "2004/b.MID", "2006/c.midi.mid"]:
+    for relative in ["2004/a.mid", "2004/b.MID", "2006/c.midi.mid", "2008/d.midi"]:
         (midi_root / relative).parent.mkdir(parents=True, exist_ok=True)
         (midi_root / relative).write_bytes(b"")
     (audio_root / "2004").mkdir(parents=True)
@@ -163,6 +163,7 @@ def test_run_mirrors_hierarchy_and_skips_existing(tmp_path, monkeypatch):
     assert sorted(p.relative_to(audio_root).as_posix() for p in captured) == [
         "2004/b_v1.2.wav",
         "2006/c.midi_v1.2.wav",
+        "2008/d_v1.2.wav",
     ]
 
 

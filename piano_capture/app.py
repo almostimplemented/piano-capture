@@ -177,7 +177,7 @@ def run(
     Args:
         input_midi_root:
             Path to root directory of MIDI files. All files beneath this ending in
-            ".mid" will be played in the session.
+            ".mid" or ".midi" will be played in the session.
         output_audio_root:
             Path to the root directory for WAV file output. Each destination filepath
             is derived from the correspondong MIDI file: the relative path will be the
@@ -248,7 +248,9 @@ def run(
 
     midi_root = Path(input_midi_root).absolute()
     audio_root = Path(output_audio_root).absolute()
-    midi_filepaths = list(midi_root.rglob("*.[Mm][Ii][Dd]"))
+    midi_filepaths = [
+        p for p in midi_root.rglob("*") if p.suffix.lower() in (".mid", ".midi")
+    ]
     midi_filepaths = sorted(midi_filepaths, key=lambda p: p.stat().st_size)
 
     print(f"Preparing to record {len(midi_filepaths)} MIDI files beneath {midi_root}")

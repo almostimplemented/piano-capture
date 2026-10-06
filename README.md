@@ -12,7 +12,7 @@ of the MAESTRO dataset with `piano_capture` on Zenodo (**Studio MAESTRO**: https
 pip install git+https://github.com/almostimplemented/piano-capture
 ```
 
-Requires Python 3.10+. Depending on your platform you may also need:
+Requires Python 3.9+. Depending on your platform you may also need:
 
 - **PortAudio** (used for audio input): bundled on macOS and Windows; on Linux, `sudo apt install libportaudio2`.
 - **ffmpeg** (only for `piano-capture-postprocess`): `brew install ffmpeg` / `sudo apt install ffmpeg`.
