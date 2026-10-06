@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "piano-capture"
+type: software
+authors:
+  - family-names: Edwards
+    given-names: Andrew
+repository-code: "https://github.com/almostimplemented/piano-capture"
+preferred-citation:
+  type: article
+  title: "A Data-Driven Analysis of Robust Automatic Piano Transcription"
+  authors:
+    - family-names: Edwards
+      given-names: Drew
+    - family-names: Dixon
+      given-names: Simon
+    - family-names: Benetos
+      given-names: Emmanouil
+    - family-names: Maezawa
+      given-names: Akira
+    - family-names: Kusaka
+      given-names: Yuta
+  journal: "IEEE Signal Processing Letters"
+  volume: 31
+  start: 681
+  end: 685
+  year: 2024

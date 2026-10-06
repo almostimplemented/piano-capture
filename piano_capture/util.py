@@ -22,8 +22,13 @@ def print_banner():
     )
 
 
-if __name__ == "__main__":
+def list_devices():
+    """Print the available MIDI output ports and audio devices."""
     print("mido.get_output_names()")
     print(mido.get_output_names())
     print("sounddevice.query_devices()")
     print(sd.query_devices())
+
+
+if __name__ == "__main__":
+    list_devices()
